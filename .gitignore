@@ -1,0 +1,7 @@
+.idea
+/__pycache/
+fabfile.py
+fabfile.pyc
+/www/__pycache/
+/www/test.py
+.DS_Store
