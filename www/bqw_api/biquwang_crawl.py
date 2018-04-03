@@ -62,7 +62,7 @@ def myRequest(url, params=None):
     UA = random.choice(UserAgents)
     # params={'searchkey':bookTitle}
     try:
-        data = requests.get(url, headers={'User-Agent': UA}, params=params, timeout=30)
+        data = requests.get(url, headers={'User-Agent': UA,"Accept-Encoding":""}, params=params, timeout=30)
         return data
     except Exception as e:
         getDataErro = True
