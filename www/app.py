@@ -33,8 +33,6 @@ def init_jinja2(app,**kw):
             env.filters[name]=f
     app['__templating__']=env
 
-
-
 # middlewares 过滤器----------------
 
 @asyncio.coroutine

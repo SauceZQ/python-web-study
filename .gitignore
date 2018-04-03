@@ -1,7 +1,13 @@
 .idea
-/__pycache/
+.DS_Store
+
 fabfile.py
 fabfile.pyc
-/www/__pycache/
+
+/__pycache__/
+/www/bqw_api/__pycache__/
+/www/__pycache__/
 /www/test.py
-.DS_Store
+/dist/
+/backup/
+/ios/
