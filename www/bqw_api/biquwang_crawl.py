@@ -230,8 +230,9 @@ def searchNovel(searchKey):
         newsChapter = allPs[3].find('a')
         newsChapterTitle = newsChapter.get_text()
         newsChapterUrl = '/%s/%s' % (novelUrl.split('/')[-2], newsChapter['href'])
-        updateTimeType = datetime.strptime(updateTime, '%Y-%m-%d')
-        timeDelta = datetime.now() - updateTimeType
+        print("什么玩意儿=",updateTime)
+        updateTimeType = datetime.datetime.strptime(updateTime, '%Y-%m-%d')
+        timeDelta = datetime.datetime.now() - updateTimeType
         novelStatus = '完本' if int(timeDelta.days) > 10 else '连载中'
         return [{
             'novelName': novelName,
@@ -418,7 +419,7 @@ def doCrawl(name):
     dbUtils = DBUtils()
     # python 自带队列
     queue = Queue()
-    startTime = datetime.now()
+    startTime = datetime.datetime.now()
     print("搜索《%s》中..." % name)
     # 查找所有的章节名
     # allChapters,chapterId=getAllChapterName(name)
@@ -432,7 +433,7 @@ def doCrawl(name):
         getDataErro = False
         return False
     start(queue)
-    endTime = datetime.now()
+    endTime = datetime.datetime.now()
     print('已完成！时间差=', endTime - startTime)
     dbUtils.close()
     # 搜索完毕
