@@ -8,6 +8,8 @@ import threading
 import time
 from datetime import datetime
 from multiprocessing import Queue
+import logging
+import linecache
 
 import requests
 from bs4 import BeautifulSoup
@@ -22,6 +24,7 @@ host = 'http://www.biquge.com.tw/'
 # get 请求 urlencode gb2312
 # 参数 searchkey=%CE%D2%CA%C7%D6%C1%D7%F0
 searchUrl = 'http://www.biquge.com.tw/modules/article/soshu.php'
+
 # UA 标识
 UserAgents = [
     "Mozilla/5.0 (X11; CrOS i686 2268.111.0) AppleWebKit/536.11 (KHTML, like Gecko) Chrome/20.0.1132.57 Safari/536.11",
@@ -43,7 +46,7 @@ UserAgents = [
     "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/535.24 (KHTML, like Gecko) Chrome/19.0.1055.1 Safari/535.24"]
 
 # debug
-DEBUG = False
+DEBUG = True
 
 # 线程数 
 maxThreads = 10
@@ -55,14 +58,26 @@ getDataErro = False
 toAddr = '852919300@qq.com'
 
 
+def getProxyIp():
+    filePath = "./bqw_api/ips.txt"
+    linePos = random.randint(0, 200)
+    ip = linecache.getline(filePath, linePos)
+    return ip.strip('\n')
+
+
 #
 # 简单封装一下 get 请求
 # 
 def myRequest(url, params=None):
     UA = random.choice(UserAgents)
-    # params={'searchkey':bookTitle}
     try:
-        data = requests.get(url, headers={'User-Agent': UA,"Accept-Encoding":""}, params=params, timeout=30)
+        # ip = getProxyIp()
+        # proxies = {
+        #     "http": "http://" + ip
+        # }
+        # print(proxies)
+        data = requests.get(url, headers={'User-Agent': UA, "Accept-Encoding": ""}, proxies=proxies, params=params,
+                            timeout=30)
         return data
     except Exception as e:
         getDataErro = True
@@ -104,7 +119,6 @@ def getAllChapterName(bookTitle):
         return None;
     data.encoding = 'gbk'
     responseHtml = data.text
-    DEBUG = False
     if (DEBUG):
         print("搜索的网页结果:\r\n", responseHtml)
     # 使用 beautifulsoup 加载返回的网页
@@ -172,6 +186,8 @@ def searchNovel(searchKey):
     # 搜索结果每页数据
     def parseResultListPage(pageurl):
         data = myRequest(pageurl)
+        if (DEBUG):
+            logging.info("返回的数据=:" + data)
         if (data is None):
             return []
         data.encoding = 'utf-8'
@@ -202,11 +218,17 @@ def searchNovel(searchKey):
     searchKey = searchKey.encode('gbk')
     params = {'searchkey': searchKey}
     data = myRequest(searchUrl, params=params)
+
     if (data is None):
         return []
     data.encoding = 'gbk'
     searchPageUrl = data.url
     responseText = data.text
+    if (DEBUG):
+        logging.info("返回的数据=", responseText)
+    if (responseText.find("403 - 禁止访问: 访问被拒绝")):
+        # 说明ip被ban了
+        return []
     soup = BeautifulSoup(responseText, 'lxml')
     # 判断是否是只有唯一值，或则多个结果 根据当前url可以判断
     hasOnlyOneResult = searchPageUrl.find('modules')
@@ -230,7 +252,7 @@ def searchNovel(searchKey):
         newsChapter = allPs[3].find('a')
         newsChapterTitle = newsChapter.get_text()
         newsChapterUrl = '/%s/%s' % (novelUrl.split('/')[-2], newsChapter['href'])
-        print("什么玩意儿=",updateTime)
+        print("什么玩意儿=", updateTime)
         updateTimeType = datetime.datetime.strptime(updateTime, '%Y-%m-%d')
         timeDelta = datetime.datetime.now() - updateTimeType
         novelStatus = '完本' if int(timeDelta.days) > 10 else '连载中'

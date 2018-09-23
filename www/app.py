@@ -1,6 +1,7 @@
-import logging;
+#!/usr/bin/env python3
+# _*_ coding:utf-8 _*_
 
-import biquwang_crawl
+import logging;
 import orm
 from handlers import COOKIE_NAME, cookie2user
 from jinja2 import Environment, FileSystemLoader

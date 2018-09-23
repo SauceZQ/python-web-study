@@ -19,10 +19,13 @@ from orm import DateEncoder
 
 from bqw_api.bqw_models import bqw_read_history, bqw_wx_formId, kmj_page_record
 from bqw_api.biquwang_crawl import parseDetail, getAllChapterByUrl, searchNovel
+# 新笔趣阁
+from bqw_api.newbqw_crawl import search_novel, get_chapter_list, get_chapter_detail
 
 APP_ID = 'wx0e2b2d308df6ae01'
 SECRET = '20766ba2433e83d9ad91d583f690c645'
-accessToken=''
+accessToken = ''
+
 
 #
 # 格式化返回结果
@@ -62,7 +65,8 @@ def bqw_api_search(*, searchKey, page=1, limit=20):
     limit = limit if limit > 0 else 20
     # 页码处理
     page = page - 1
-    searchResult = searchNovel(searchKey)
+    # searchResult = searchNovel(searchKey)
+    searchResult = search_novel(searchKey)
     totalPage = len(searchResult)
     # 分页处理
     searchResult = searchResult[(page * limit):(page + 1) * limit]
@@ -103,9 +107,8 @@ def bqw_api_get_chapterlist(*, novelUrl, page=1, limit=20, orderBy=1):
     page = page - 1
 
     # 这里不用存到数据库，每次查询直接去遍历爬取一遍即可嘿嘿
-    # allChapters, chapterId=getAllChapterName(name)
-    allChaptersData = getAllChapterByUrl(novelUrl)
-
+    # allChaptersData = getAllChapterByUrl(novelUrl)
+    allChaptersData = get_chapter_list(novelUrl)
     # 如果第一次爬取失败，执行第二次爬取
     # 后期存自己数据库，防止爬取失败的情况，
     # 优先从数据库中存取，然后执行定时任务爬取更新数据库，
@@ -122,7 +125,8 @@ def bqw_api_get_chapterlist(*, novelUrl, page=1, limit=20, orderBy=1):
         'page': page + 1
     }
     if (allChaptersData):
-        allChapters = allChaptersData['allChapters']
+        # allChapters = allChaptersData['allChapters']
+        allChapters = allChaptersData
         # 最大页码
         total = len(allChapters)
         totalPage = math.ceil(total / limit)
@@ -148,7 +152,8 @@ def bqw_api_get_chapterlist(*, novelUrl, page=1, limit=20, orderBy=1):
 @get('/bqwapi/getDetail')
 @asyncio.coroutine
 def bqw_api_getDetail(*, detailUrl=''):
-    chapterDetail = parseDetail(detailUrl)
+    # chapterDetail = parseDetail(detailUrl)
+    chapterDetail=get_chapter_detail(detailUrl)
     return formatResponse(chapterDetail)
 
 
@@ -317,16 +322,19 @@ def getFormId(*, openId):
     wxFormId = bqw_wx_formId()
     today = datetime.datetime.now()
     validty = today - datetime.timedelta(days=6)
-    result = yield from wxFormId.findAll('openid=? and status=? and created_time>?', [openId, 0, validty],orderBy='created_time')
-    if(len(result)==0):
+    result = yield from wxFormId.findAll('openid=? and status=? and created_time>?', [openId, 0, validty],
+                                         orderBy='created_time')
+    if (len(result) == 0):
         print("formID 没有了，推送不了")
-        return ;
-    formIdRes=result[0]
-    #更改状态
-    formId=formIdRes['form_id']
-    formIdRes['status']=1;
+        return;
+    formIdRes = result[0]
+    # 更改状态
+    formId = formIdRes['form_id']
+    formIdRes['status'] = 1;
     yield from formIdRes.update()
     return formId
+
+
 #
 # 获取 access_token
 def getAccessToken():
@@ -335,10 +343,11 @@ def getAccessToken():
     resp = json.loads(respText)
     if 'access_token' in resp:
         # return resp['access_token']
-        accessToken=resp['access_token']
+        accessToken = resp['access_token']
     else:
         # return False
-        accessToken=''
+        accessToken = ''
+
 
 #
 # 模版消息 订阅小说更新通知
@@ -347,17 +356,18 @@ def mobanMsg(openId, templateId, data, page='index'):
     if accessToken == '':
         getAccessToken()
 
-    formId=getFormId()
+    formId = getFormId()
 
     url = 'https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=%s' % accessToken
     params = {
         'touser': 'oDeII4zFCgWooci6aCbHOj9PB9uA',
         'data': data,
         'page': page,
-        'form_id':formId
+        'form_id': formId
     }
-    resp=requests.post(url,params=params)
+    resp = requests.post(url, params=params)
     print(resp.text)
+
 
 #
 #
