@@ -17,13 +17,14 @@ from coroweb import get, post
 from handlers import isEmpty
 from orm import DateEncoder
 
-from bqw_api.bqw_models import bqw_read_history, bqw_wx_formId, kmj_page_record
+from bqw_api.bqw_models import bqw_read_history, bqw_wx_formId, kmj_page_record, BqwWxPush
 from bqw_api.biquwang_crawl import parseDetail, getAllChapterByUrl, searchNovel
 # 新笔趣阁
 from bqw_api.newbqw_crawl import search_novel, get_chapter_list, get_chapter_detail
 
 APP_ID = 'wx0e2b2d308df6ae01'
 SECRET = '20766ba2433e83d9ad91d583f690c645'
+TEMPLATE_ID = 'LrNVtcHDMrws-kZQEYIXS-7vNoHS2prxAeFH54os30M'
 accessToken = ''
 
 
@@ -37,6 +38,7 @@ def formatResponse(resData):
     r = web.Response(headers=headers)
     r.content_type = 'application/json'
     r.body = json.dumps(resData, cls=DateEncoder, ensure_ascii=False).encode('utf-8')
+
     return r
 
 
@@ -152,8 +154,7 @@ def bqw_api_get_chapterlist(*, novelUrl, page=1, limit=20, orderBy=1):
 @get('/bqwapi/getDetail')
 @asyncio.coroutine
 def bqw_api_getDetail(*, detailUrl=''):
-    # chapterDetail = parseDetail(detailUrl)
-    chapterDetail=get_chapter_detail(detailUrl)
+    chapterDetail = get_chapter_detail(detailUrl)
     return formatResponse(chapterDetail)
 
 
@@ -235,6 +236,96 @@ def bqw_api_get_readHistory(*, openid):
 # ------------------- 微信接口 相关-------------------
 
 #
+# 推送更新
+@post("/bqwapi/push")
+@asyncio.coroutine
+def push_novel_update(*, novel):
+    novel = json.loads(novel)
+    # 获取需要推送的用户
+    push_wx_info = yield from bqw_wx_formId.findWxFormId()
+    resData = {
+        'error_code': 0,
+        'msg': 'success',
+        'data': ""
+    }
+    if len(push_wx_info) == 0:
+        logging.info("查找不到可用的formid了")
+        resData['error_code'] = 1
+        resData['msg'] = "查找不到可用的formid了"
+        return formatResponse(resData)
+
+    for info in push_wx_info:
+        # 判断当前url 是否是已经推送的
+        wx_push = yield from BqwWxPush.findAll("push_url=? and openid=?", [novel['newsChapterUrl'], info.openid])
+        if len(wx_push) != 0:
+            logging.info("《%s》已经推送过了" % novel['newsChapterTitle'])
+            resData['error_code'] = 1
+            resData['msg'] = "已经推送过了"
+            return formatResponse(resData)
+        data = {
+            "keyword1": {
+                "value": "《%s》" % novel['novelName'],
+                'color': '#173177'
+            },
+            "keyword2": {
+                "value": novel['newsChapterTitle'],
+                'color': '#173177'
+            },
+            "keyword3": {
+                "value": "更新时间%s" % novel['updateTime'],
+                'color': '#173177'
+            },
+        }
+        page = "pages/chapterList/chapterlist?novelUrl=%s&novelName=%s" % (novel['novelUrl'], novel['novelName'])
+        result = mobanMsg(info.openid, info.form_id, TEMPLATE_ID, data, page)
+        print("发送结果=", result)
+        wxPush = BqwWxPush(openid=info.openid, push_url=novel['newsChapterUrl'], novel_name=novel['novelName'])
+        print("保存的push=", wxPush)
+        # 如果是 推送成功 或则 formid 重复都要更新当前 formid 状态，
+        if result == 0:
+            yield from wxPush.save()
+            yield from bqw_change_form_id_status(info.id)
+        if result == 1:
+            yield from bqw_change_form_id_status(info.id)
+
+    resData = {
+        'error_code': 0,
+        'msg': 'success',
+        'data': ""
+    }
+    return formatResponse(resData)
+
+
+#
+# 获取推送用户
+@get("/bqwapi/pushuser")
+@asyncio.coroutine
+def bqw_push_user():
+    push_wx_info = yield from bqw_wx_formId.findWxFormId()
+    response_data = {
+        "error_code": 0,
+        "msg": "success",
+        "data": push_wx_info
+    }
+    return formatResponse(response_data)
+
+
+#
+# 改变状态，将已经使用的formid状态更改
+@asyncio.coroutine
+def bqw_change_form_id_status(id):
+    wx_info = yield from bqw_wx_formId.find(id)
+    wx_info.status = 1
+    yield from wx_info.update()
+    response_data = {
+        "error_code": 0,
+        "msg": "success",
+        "data": []
+    }
+    return formatResponse(response_data)
+
+
+#
 # 消息推送校验
 @get('/bqwapi/msgsend')
 @asyncio.coroutine
@@ -306,6 +397,10 @@ def bqw_api_save_formId(*, openId, formId):
     wxFormId.openid = openId
     wxFormId.form_id = formId
     wxFormId.created_time = datetime.datetime.now()
+    # todo 这里暂时写死 openid 只有我的 openid 才可以推送，后期可以改成订阅功能，把需要推送的用户存到一个推送表
+    if openId == 'oDeII4zFCgWooci6aCbHOj9PB9uA':
+        wxFormId.is_push = 1
+
     row = yield from wxFormId.save()
     if row != 1:
         return formatResponse(resData)
@@ -315,24 +410,24 @@ def bqw_api_save_formId(*, openId, formId):
     return formatResponse(resData)
 
 
-@get('/getFormId')
-@asyncio.coroutine
-def getFormId(*, openId):
-    # 获取openId 对应的 formid
-    wxFormId = bqw_wx_formId()
-    today = datetime.datetime.now()
-    validty = today - datetime.timedelta(days=6)
-    result = yield from wxFormId.findAll('openid=? and status=? and created_time>?', [openId, 0, validty],
-                                         orderBy='created_time')
-    if (len(result) == 0):
-        print("formID 没有了，推送不了")
-        return;
-    formIdRes = result[0]
-    # 更改状态
-    formId = formIdRes['form_id']
-    formIdRes['status'] = 1;
-    yield from formIdRes.update()
-    return formId
+# @get('/getFormId')
+# @asyncio.coroutine
+# def getFormId(*, openId):
+#     # 获取openId 对应的 formid
+#     wxFormId = bqw_wx_formId()
+#     today = datetime.datetime.now()
+#     validty = today - datetime.timedelta(days=6)
+#     result = yield from wxFormId.findAll('openid=? and status=? and created_time>?', [openId, 0, validty],
+#                                          orderBy='created_time')
+#     if (len(result) == 0):
+#         print("formID 没有了，推送不了")
+#         return;
+#     formIdRes = result[0]
+#     # 更改状态
+#     formId = formIdRes['form_id']
+#     formIdRes['status'] = 1;
+#     yield from formIdRes.update()
+#     return formId
 
 
 #
@@ -342,31 +437,39 @@ def getAccessToken():
     respText = requests.get(url).text
     resp = json.loads(respText)
     if 'access_token' in resp:
-        # return resp['access_token']
         accessToken = resp['access_token']
     else:
-        # return False
         accessToken = ''
+    return accessToken
 
 
 #
 # 模版消息 订阅小说更新通知
-def mobanMsg(openId, templateId, data, page='index'):
+def mobanMsg(open_id, form_id, template_id, data, page="pages/bqw/bqw"):
     global accessToken
     if accessToken == '':
-        getAccessToken()
-
-    formId = getFormId()
-
+        accessToken = getAccessToken()
     url = 'https://api.weixin.qq.com/cgi-bin/message/wxopen/template/send?access_token=%s' % accessToken
     params = {
-        'touser': 'oDeII4zFCgWooci6aCbHOj9PB9uA',
-        'data': data,
-        'page': page,
-        'form_id': formId
+        "touser": open_id,
+        "data": data,
+        "page": page,
+        "template_id": template_id,
+        "form_id": form_id
     }
-    resp = requests.post(url, params=params)
-    print(resp.text)
+    resp = requests.post(url, data=json.dumps(params))
+    resp = json.loads(resp.text)
+    if "errmsg" in resp:
+        if resp['errcode'] == 0:
+            # 推送成功
+            return 0
+        elif resp["errcode"] == 41029:
+            print("推送失败1：%s" % resp)
+            return 1
+            pass
+        else:
+            print("推送失败2：%s" % resp)
+            return 2
 
 
 #

@@ -44,3 +44,30 @@ create table comments (
     primary key (`id`)
 ) engine=innodb default charset=utf8;
 
+CREATE TABLE `history_read` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `novelname` varchar(50) NOT NULL,
+  `openid` varchar(200) NOT NULL,
+  `last_read_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `chapter_url` varchar(200) NOT NULL,
+  `chapter_name` varchar(200) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=82362 DEFAULT CHARSET=utf8;
+
+CREATE TABLE `wx_form_id` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `openid` varchar(100) NOT NULL,
+  `form_id` varchar(100) NOT NULL,
+  `status` int(2) DEFAULT '0',
+  `created_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_push` int(2) DEFAULT '0',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=82360 DEFAULT CHARSET=utf8;NGINE=InnoDB AUTO_INCREMENT=82360 DEFAULT CHARSET=utf8;
+
+CREATE TABLE `wx_push` (
+  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  `push_url` varchar(256) DEFAULT '""',
+  `openid` varchar(100) DEFAULT '""',
+  `novel_name` varchar(256) DEFAULT '""',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8;

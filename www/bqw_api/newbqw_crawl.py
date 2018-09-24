@@ -75,7 +75,8 @@ def parse4bs(html):
 # 搜索小说，key 可以是书名 作者名 也可以模糊搜索
 # @params novel_name 小说名／作者／模糊搜索key
 # @return 返回搜索列表
-def search_novel(novel_name):
+# todo 这里也不想做分页了，模糊搜索就模糊，不过会先筛选完全匹配key的novel到第一个
+def search_novel(novel_name, max_result=None):
     all_novel_list = []
     max_page = get_novel_max_page(novel_name)
     if max_page == 0:
@@ -86,6 +87,14 @@ def search_novel(novel_name):
         novel_list = parse_search_novel_list(get_page_url(novel_name, page))
         if novel_list:
             all_novel_list = all_novel_list + novel_list
+    # 这里手动处理一下把完全匹配的放到第一个
+    filterList = list(filter(lambda novel: novel['novelName'] == novel_name, all_novel_list))
+    if len(filterList) == 1:
+        match_novel = filterList[0]
+        index = all_novel_list.index(match_novel)
+        if index != 0:
+            all_novel_list.remove(match_novel)
+            all_novel_list.insert(0, match_novel)
     return all_novel_list
 
 
@@ -115,6 +124,19 @@ def get_chapter_list(novel_chapter_url):
 
 
 #
+# 获取最新更新时间
+def get_last_update_time(novel_chapter_url):
+    data = my_request(novel_chapter_url)
+    # 默认昨天更新
+    last_update_time = datetime.datetime.now() + datetime.timedelta(days=-1)
+    if data is None:
+        return last_update_time
+    soup = parse4bs(data)
+    last_update_time = soup.find("div", id="info").findAll('p')[2].text.replace("最后更新：", "")
+    return last_update_time
+
+
+#
 # 获取章节详情
 # @params chapter_url 章节href
 def get_chapter_detail(chapter_url):
@@ -138,19 +160,21 @@ def get_chapter_detail(chapter_url):
         if page_a.text == '下一章':
             next_page_url = page_a['href']
         if page_a.text == "章节列表":
-            novel_name = page_a["href"]
+            novel_url = page_a["href"]
     # 这里解析一波小说名，但是有可能会出错
     novel_name = soup.find("div", class_="con_top").findAll("a")[2].text.strip().strip("\r\n")
     # 小说章节名称
     chapter_title = soup.find('div', class_='bookname').find('h1').text.strip().strip("\r\n")
     # 小说内容html 这个类型是 tag 类型，到时候需要str一下
     html_content = soup.find('div', id='content')
-    content_str = html_content.get_text()
-    html_content = str(html_content)
-    # 处理一波标签 但是这里拿出来的好像就没有 html 的标签
-    content_str = content_str.replace('<br/>', '\r\n')
-    return get_chapter_detail_dict(novel_name, novel_url, chapter_title, content_str, html_content, last_page_url,
+    # content_str = html_content.text
+    # 处理一波标签 小程序 是不能直接加载 <br/> 换行的
+    content_str = str(html_content).replace('<div id="content">', '').replace('</div>', "").replace("<br/>", "\r\n")
+    return get_chapter_detail_dict(novel_name, novel_url,
+                                   chapter_title, content_str,
+                                   html_content, last_page_url,
                                    chapter_url, next_page_url)
+
 
 #
 # 获取章节详情dict
@@ -169,7 +193,7 @@ def get_chapter_detail_dict(novel_name="", novel_url="", chapter_title="", conte
         'novelUrl': novel_url,
         'chapterTitle': chapter_title,
         'content': content,
-        'html_content': html_content,
+        'html_content': str(html_content),
         'lastPageUrl': last_page_url,
         'currentPageUrl': current_page_url,
         'nextPageUrl': next_page_url
@@ -296,10 +320,11 @@ def get_novel_dict(cover_img_url="", novel_name="", novel_type="", author="", no
 
 
 if __name__ == '__main__':
-    novel_list = search_novel("元尊")
-    for novel in novel_list:
-        for index, chapter in enumerate(get_chapter_list(novel["novelUrl"])):
-            get_chapter_detail(chapter["href"])
-            if index > 10:
-                break
-        break
+    novel_list = search_novel("斗破苍穹")
+    # for novel in novel_list:
+    #     for index, chapter in enumerate(get_chapter_list(novel["novelUrl"])):
+    #         get_chapter_detail(chapter["href"])
+    #         if index > 10:
+    #             break
+    #     break
+    pass
